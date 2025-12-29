@@ -1,0 +1,11 @@
+version: "3.8"
+
+services:
+  java-app:
+    image: sample-java-app:latest
+    container_name: sample-java-app
+    build:
+      context: .
+    ports:
+      - "8081:8080"
+    restart: always
