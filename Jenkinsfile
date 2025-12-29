@@ -2,13 +2,14 @@ pipeline {
     agent any
 
     tools {
-        maven 'Maven-3.9.12'
         jdk 'JDK21'
+        maven 'Maven-3.9.12'
     }
 
     environment {
-        // Jenkins credentials ID for Nexus (username/password)
-        NEXUS_CREDENTIALS = credentials('nexus-jenkins-creds')
+        NEXUS_CREDENTIALS_ID = 'nexus-jenkins-creds'
+        JAVA_HOME = '/usr/lib/jvm/java-21-openjdk-amd64'
+        PATH = "${JAVA_HOME}/bin:${env.PATH}"
     }
 
     stages {
@@ -21,17 +22,22 @@ pipeline {
 
         stage('Build & Unit Tests') {
             steps {
-                sh 'mvn clean verify'
+                configFileProvider([configFile(fileId: 'maven-settings-nexus', variable: 'MAVEN_SETTINGS')]) {
+                    sh 'mvn clean verify -s $MAVEN_SETTINGS'
+                }
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('SonarQube server') {
-                    sh '''
-                      mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
-                      -Dsonar.projectKey=springboot-app
-                    '''
+                    configFileProvider([configFile(fileId: 'maven-settings-nexus', variable: 'MAVEN_SETTINGS')]) {
+                        sh '''
+                            mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+                            -Dsonar.projectKey=springboot-app \
+                            -s $MAVEN_SETTINGS
+                        '''
+                    }
                 }
             }
         }
@@ -46,12 +52,16 @@ pipeline {
 
         stage('Deploy to Nexus (Release)') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'nexus-jenkins-creds',
-                    usernameVariable: 'NEXUS_CREDENTIALS_USR',
-                    passwordVariable: 'NEXUS_CREDENTIALS_PSW'
-                )]) {
-                    sh 'mvn deploy'
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: "${NEXUS_CREDENTIALS_ID}",
+                        usernameVariable: 'NEXUS_USER',
+                        passwordVariable: 'NEXUS_PASS'
+                    )
+                ]) {
+                    configFileProvider([configFile(fileId: 'maven-settings-nexus', variable: 'MAVEN_SETTINGS')]) {
+                        sh 'mvn deploy -s $MAVEN_SETTINGS'
+                    }
                 }
             }
         }
@@ -59,7 +69,7 @@ pipeline {
 
     post {
         success {
-            echo 'Pipeline completed successfully!'
+            echo 'Pipeline completed successfully: Build, SonarQube, Nexus deployment'
         }
         failure {
             echo 'Pipeline failed!'
