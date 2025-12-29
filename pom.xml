@@ -91,7 +91,7 @@
     <!-- ================= NEXUS DEPLOYMENT ================= -->
     <distributionManagement>
         <repository>
-            <id>nexus-releases</id>
+            <id>jenkins-maven-releases</id>
             <url>http://172.25.3.113:8081/repository/maven-releases/</url>
         </repository>
     </distributionManagement>
