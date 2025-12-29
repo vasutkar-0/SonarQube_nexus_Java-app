@@ -24,7 +24,7 @@ pipeline {
             steps {
                 withSonarQubeEnv('SonarQube server') {
                     sh '''
-                      mvn sonar:sonar \
+                      mvn mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
                       -Dsonar.projectKey=springboot-app
                     '''
                 }
