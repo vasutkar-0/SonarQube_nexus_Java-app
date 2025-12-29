@@ -38,7 +38,7 @@ pipeline {
 
         stage('Quality Gate') {
             steps {
-                timeout(time: 5, unit: 'MINUTES') {
+                timeout(time: 15, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
             }
@@ -46,12 +46,13 @@ pipeline {
 
         stage('Deploy to Nexus (Release)') {
             steps {
-                // Use injected Jenkins credentials for Nexus deployment
-                sh '''
-                  mvn deploy \
-                  -Dnexus.username=${NEXUS_CREDENTIALS_USR} \
-                  -Dnexus.password=${NEXUS_CREDENTIALS_PSW}
-                '''
+                withCredentials([usernamePassword(
+                    credentialsId: 'nexus-jenkins-creds',
+                    usernameVariable: 'NEXUS_CREDENTIALS_USR',
+                    passwordVariable: 'NEXUS_CREDENTIALS_PSW'
+                )]) {
+                    sh 'mvn deploy'
+                }
             }
         }
     }
