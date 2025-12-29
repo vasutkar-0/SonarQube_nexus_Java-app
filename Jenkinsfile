@@ -6,6 +6,11 @@ pipeline {
         jdk 'JDK21'
     }
 
+    environment {
+        // Jenkins credentials ID for Nexus (username/password)
+        NEXUS_CREDENTIALS = credentials('nexus-jenkins-creds')
+    }
+
     stages {
 
         stage('Checkout') {
@@ -41,8 +46,22 @@ pipeline {
 
         stage('Deploy to Nexus (Release)') {
             steps {
-                sh 'mvn deploy'
+                // Use injected Jenkins credentials for Nexus deployment
+                sh '''
+                  mvn deploy \
+                  -Dnexus.username=${NEXUS_CREDENTIALS_USR} \
+                  -Dnexus.password=${NEXUS_CREDENTIALS_PSW}
+                '''
             }
+        }
+    }
+
+    post {
+        success {
+            echo 'Pipeline completed successfully!'
+        }
+        failure {
+            echo 'Pipeline failed!'
         }
     }
 }
