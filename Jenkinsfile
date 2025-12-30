@@ -40,7 +40,7 @@ pipeline {
                         variable: 'MAVEN_SETTINGS'
                     )]) {
                         sh """
-                          mvn sonar:sonar \
+                          mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
                           -Dsonar.projectKey=springboot-app-${BRANCH_NAME} \
                           -s \$MAVEN_SETTINGS
                         """
