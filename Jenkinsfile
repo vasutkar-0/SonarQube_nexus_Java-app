@@ -7,7 +7,6 @@ pipeline {
     }
 
     environment {
-        NEXUS_CREDENTIALS_ID = 'nexus-jenkins-creds'
         JAVA_HOME = '/usr/lib/jvm/java-21-openjdk-amd64'
         PATH = "${JAVA_HOME}/bin:${env.PATH}"
     }
@@ -64,11 +63,19 @@ pipeline {
                 branch 'develop'
             }
             steps {
-                configFileProvider([configFile(
-                    fileId: 'maven-settings-nexus',
-                    variable: 'MAVEN_SETTINGS'
-                )]) {
-                    sh 'mvn deploy -DskipTests -s $MAVEN_SETTINGS'
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'nexus-jenkins-creds',
+                        usernameVariable: 'NEXUS_USER',
+                        passwordVariable: 'NEXUS_PASS'
+                    )
+                ]) {
+                    configFileProvider([configFile(
+                        fileId: 'maven-settings-nexus',
+                        variable: 'MAVEN_SETTINGS'
+                    )]) {
+                        sh 'mvn deploy -DskipTests -s $MAVEN_SETTINGS'
+                    }
                 }
             }
         }
@@ -82,11 +89,19 @@ pipeline {
             steps {
                 input message: "Deploy RELEASE artifact to Nexus?"
 
-                configFileProvider([configFile(
-                    fileId: 'maven-settings-nexus',
-                    variable: 'MAVEN_SETTINGS'
-                )]) {
-                    sh 'mvn deploy -DskipTests -s $MAVEN_SETTINGS'
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'nexus-jenkins-creds',
+                        usernameVariable: 'NEXUS_USER',
+                        passwordVariable: 'NEXUS_PASS'
+                    )
+                ]) {
+                    configFileProvider([configFile(
+                        fileId: 'maven-settings-nexus',
+                        variable: 'MAVEN_SETTINGS'
+                    )]) {
+                        sh 'mvn deploy -DskipTests -s $MAVEN_SETTINGS'
+                    }
                 }
             }
         }
