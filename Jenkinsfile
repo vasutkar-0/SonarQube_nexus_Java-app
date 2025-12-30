@@ -17,12 +17,16 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+                echo "Building branch: ${BRANCH_NAME}"
             }
         }
 
         stage('Build & Unit Tests') {
             steps {
-                configFileProvider([configFile(fileId: 'maven-settings-nexus', variable: 'MAVEN_SETTINGS')]) {
+                configFileProvider([configFile(
+                    fileId: 'maven-settings-nexus',
+                    variable: 'MAVEN_SETTINGS'
+                )]) {
                     sh 'mvn clean verify -s $MAVEN_SETTINGS'
                 }
             }
@@ -31,12 +35,15 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('SonarQube server') {
-                    configFileProvider([configFile(fileId: 'maven-settings-nexus', variable: 'MAVEN_SETTINGS')]) {
-                        sh '''
-                            mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
-                            -Dsonar.projectKey=springboot-app \
-                            -s $MAVEN_SETTINGS
-                        '''
+                    configFileProvider([configFile(
+                        fileId: 'maven-settings-nexus',
+                        variable: 'MAVEN_SETTINGS'
+                    )]) {
+                        sh """
+                          mvn sonar:sonar \
+                          -Dsonar.projectKey=springboot-app-${BRANCH_NAME} \
+                          -s \$MAVEN_SETTINGS
+                        """
                     }
                 }
             }
@@ -44,24 +51,42 @@ pipeline {
 
         stage('Quality Gate') {
             steps {
-                timeout(time: 15, unit: 'MINUTES') {
+                timeout(time: 5, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
             }
         }
 
-        stage('Deploy to Nexus (Release)') {
+        /* ================= SNAPSHOT DEPLOY ================= */
+
+        stage('Deploy SNAPSHOT to Nexus') {
+            when {
+                branch 'develop'
+            }
             steps {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: "${NEXUS_CREDENTIALS_ID}",
-                        usernameVariable: 'NEXUS_USER',
-                        passwordVariable: 'NEXUS_PASS'
-                    )
-                ]) {
-                    configFileProvider([configFile(fileId: 'maven-settings-nexus', variable: 'MAVEN_SETTINGS')]) {
-                        sh 'mvn deploy -s $MAVEN_SETTINGS'
-                    }
+                configFileProvider([configFile(
+                    fileId: 'maven-settings-nexus',
+                    variable: 'MAVEN_SETTINGS'
+                )]) {
+                    sh 'mvn deploy -DskipTests -s $MAVEN_SETTINGS'
+                }
+            }
+        }
+
+        /* ================= RELEASE DEPLOY ================= */
+
+        stage('Deploy RELEASE to Nexus') {
+            when {
+                branch 'main'
+            }
+            steps {
+                input message: "Deploy RELEASE artifact to Nexus?"
+
+                configFileProvider([configFile(
+                    fileId: 'maven-settings-nexus',
+                    variable: 'MAVEN_SETTINGS'
+                )]) {
+                    sh 'mvn deploy -DskipTests -s $MAVEN_SETTINGS'
                 }
             }
         }
@@ -69,10 +94,10 @@ pipeline {
 
     post {
         success {
-            echo 'Pipeline completed successfully: Build, SonarQube, Nexus deployment'
+            echo "✅ Pipeline succeeded for branch: ${BRANCH_NAME}"
         }
         failure {
-            echo 'Pipeline failed!'
+            echo "❌ Pipeline failed for branch: ${BRANCH_NAME}"
         }
     }
 }
