@@ -90,11 +90,12 @@
 
     <!-- ================= NEXUS DEPLOYMENT ================= -->
     <distributionManagement>
-        <repository>
-            <id>jenkins-maven-releases</id>
-            <url>http://172.25.3.113:8081/repository/maven-releases/</url>
-        </repository>
+       <snapshotRepository>
+           <id>jenkins-maven-snapshots</id>
+           <url>http://172.25.3.113:8081/repository/maven-snapshots/</url>
+       </snapshotRepository>
     </distributionManagement>
+
 
 </project>
 
