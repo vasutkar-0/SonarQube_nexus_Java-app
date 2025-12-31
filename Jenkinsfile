@@ -9,6 +9,7 @@ pipeline {
     environment {
         JAVA_HOME = '/usr/lib/jvm/java-21-openjdk-amd64'
         PATH = "${JAVA_HOME}/bin:${env.PATH}"
+        IMAGE_NAME = ""  // will be set dynamically
     }
 
     stages {
@@ -16,7 +17,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
-                echo "Building branch: ${BRANCH_NAME}"
+                echo "Building branch: ${env.BRANCH_NAME}"
             }
         }
 
@@ -40,7 +41,7 @@ pipeline {
                     )]) {
                         sh """
                           mvn org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
-                          -Dsonar.projectKey=springboot-app-${BRANCH_NAME} \
+                          -Dsonar.projectKey=springboot-app-${env.BRANCH_NAME} \
                           -s \$MAVEN_SETTINGS
                         """
                     }
@@ -56,60 +57,62 @@ pipeline {
             }
         }
 
-        /* ================= RELEASE DEPLOY ================= */
-        stage('Deploy RELEASE to Nexus') {
-            when {
-                branch 'main'
-            }
+        // Download artifact from Nexus for Docker image
+        stage('Download Artifact from Nexus') {
             steps {
-                input message: "Deploy RELEASE artifact to Nexus?"
-
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'nexus-jenkins-creds',
-                        usernameVariable: 'NEXUS_USER',
-                        passwordVariable: 'NEXUS_PASS'
-                    )
-                ]) {
-                    configFileProvider([configFile(
-                        fileId: 'maven-settings-nexus',
-                        variable: 'MAVEN_SETTINGS'
-                    )]) {
-                        sh 'mvn deploy -DskipTests -s $MAVEN_SETTINGS'
-                    }
-                }
-            }
-        }
-
-        /* ================= DEPLOY MAIN FROM NEXUS ================= */
-        stage('Deploy MAIN from Nexus') {
-            when {
-                branch 'main'
-            }
-            steps {
-                input message: "Deploy MAIN artifact from Nexus to Jenkins server?"
-
                 withCredentials([usernamePassword(
                     credentialsId: 'nexus-jenkins-creds',
                     usernameVariable: 'NEXUS_USER',
                     passwordVariable: 'NEXUS_PASS'
                 )]) {
                     script {
-                        // Replace with your actual Nexus release artifact URL
-                        def ARTIFACT_URL = "http://172.25.3.113:8081/repository/maven-releases/com/example/demo/4.0.0/demo-4.0.0.jar"
-
-                        echo "Downloading artifact from Nexus: ${ARTIFACT_URL}"
+                        // Change version if needed or parameterize
+                        def artifactVersion = '4.0.0'
+                        def artifactUrl = "http://172.25.3.113:8081/repository/maven-releases/com/example/demo/${artifactVersion}/demo-${artifactVersion}.jar"
+                        echo "Downloading artifact from Nexus: ${artifactUrl}"
 
                         sh """
-                        curl -u $NEXUS_USER:$NEXUS_PASS -o app.jar -L ${ARTIFACT_URL}
-
-                        echo "Stopping existing application (if any)"
-                        pkill -f '.jar' || true
-
-                        echo "Starting application on Jenkins server"
-                        nohup java -jar app.jar > app.log 2>&1 &
+                        curl -u $NEXUS_USER:$NEXUS_PASS -L -o demo-app.jar ${artifactUrl}
                         """
                     }
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    env.IMAGE_NAME = "mydockerhubuser/myapp:${env.BRANCH_NAME}-${env.BUILD_NUMBER}"
+                    echo "Building Docker image: ${env.IMAGE_NAME}"
+                    sh "docker build -t ${env.IMAGE_NAME} ."
+                }
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(
+                        credentialsId: 'dockerhub-creds',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )]) {
+                        sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
+                    }
+                    sh "docker push ${env.IMAGE_NAME}"
+                }
+            }
+        }
+
+        stage('Deploy with Docker Compose') {
+            steps {
+                script {
+                    // Replace IMAGE_TAG placeholder in docker-compose.yml with actual image tag
+                    sh """
+                    sed 's#REPLACE_IMAGE_TAG#${env.IMAGE_NAME}#g' docker-compose.yml > docker-compose-run.yml
+                    docker-compose -f docker-compose-run.yml down || true
+                    docker-compose -f docker-compose-run.yml up -d
+                    """
                 }
             }
         }
@@ -117,10 +120,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ Pipeline succeeded for branch: ${BRANCH_NAME}"
+            echo "✅ Pipeline succeeded for branch: ${env.BRANCH_NAME}"
         }
         failure {
-            echo "❌ Pipeline failed for branch: ${BRANCH_NAME}"
+            echo "❌ Pipeline failed for branch: ${env.BRANCH_NAME}"
         }
     }
 }
