@@ -56,32 +56,7 @@ pipeline {
             }
         }
 
-        /* ================= SNAPSHOT DEPLOY ================= */
-
-        stage('Deploy SNAPSHOT to Nexus') {
-            when {
-                branch 'develop'
-            }
-            steps {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'nexus-jenkins-creds',
-                        usernameVariable: 'NEXUS_USER',
-                        passwordVariable: 'NEXUS_PASS'
-                    )
-                ]) {
-                    configFileProvider([configFile(
-                        fileId: 'maven-settings-nexus',
-                        variable: 'MAVEN_SETTINGS'
-                    )]) {
-                        sh 'mvn deploy -DskipTests -s $MAVEN_SETTINGS'
-                    }
-                }
-            }
-        }
-
         /* ================= RELEASE DEPLOY ================= */
-
         stage('Deploy RELEASE to Nexus') {
             when {
                 branch 'main'
@@ -101,6 +76,39 @@ pipeline {
                         variable: 'MAVEN_SETTINGS'
                     )]) {
                         sh 'mvn deploy -DskipTests -s $MAVEN_SETTINGS'
+                    }
+                }
+            }
+        }
+
+        /* ================= DEPLOY MAIN FROM NEXUS ================= */
+        stage('Deploy MAIN from Nexus') {
+            when {
+                branch 'main'
+            }
+            steps {
+                input message: "Deploy MAIN artifact from Nexus to Jenkins server?"
+
+                withCredentials([usernamePassword(
+                    credentialsId: 'nexus-jenkins-creds',
+                    usernameVariable: 'NEXUS_USER',
+                    passwordVariable: 'NEXUS_PASS'
+                )]) {
+                    script {
+                        // Replace with your actual Nexus release artifact URL
+                        def ARTIFACT_URL = "http://172.25.3.113:8081/repository/maven-releases/com/example/demo/4.0.0/demo-4.0.0.jar"
+
+                        echo "Downloading artifact from Nexus: ${ARTIFACT_URL}"
+
+                        sh """
+                        curl -u $NEXUS_USER:$NEXUS_PASS -o app.jar -L ${ARTIFACT_URL}
+
+                        echo "Stopping existing application (if any)"
+                        pkill -f '.jar' || true
+
+                        echo "Starting application on Jenkins server"
+                        nohup java -jar app.jar > app.log 2>&1 &
+                        """
                     }
                 }
             }
